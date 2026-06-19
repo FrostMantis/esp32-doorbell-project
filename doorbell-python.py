@@ -38,9 +38,11 @@ HEALTH_CHECK_INTERVAL = 60          # how often the watcher thread runs (seconds
 # ── State ─────────────────────────────────────────────────────────────────────
 last_notification_time  = 0
 first_message_received  = False
-last_heartbeat_time     = time.time()  # assume online at startup
-offline_alerted_at      = None         # when we last sent an offline alert
+last_heartbeat_time     = time.time()
+offline_alerted_at      = None
 is_online               = True
+ring_count_today        = 0
+ring_count_date         = None  # tracks which date the count belongs to
 
 
 # ── ntfy helper ───────────────────────────────────────────────────────────────
@@ -101,9 +103,25 @@ def on_message(client, userdata, msg):
 
         # ── Doorbell ring ──────────────────────────────────────────────────
         if event == "doorbell_ring":
+            global ring_count_today, ring_count_date
             now = time.time()
+            today = time.localtime(now)
+
+            # Reset counter at midnight
+            current_date = (today.tm_year, today.tm_mon, today.tm_mday)
+            if ring_count_date != current_date:
+                ring_count_today = 0
+                ring_count_date  = current_date
+
             if now - last_notification_time >= NOTIFICATION_COOLDOWN:
-                send_ntfy("Someone rang the doorbell!")
+                ring_count_today += 1
+                timestamp = time.strftime("%A %d %b at %H:%M", today)
+                message = (
+                    f"Someone rang the doorbell!\n"
+                    f"{timestamp}\n"
+                    f"{ring_count_today} time(s) today"
+                )
+                send_ntfy(message)
                 last_notification_time = now
             else:
                 print("[yellow]Doorbell ignored — cooldown active[/yellow]")
